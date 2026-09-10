@@ -1,6 +1,13 @@
 import octoprint.plugin
 
-from .client import BambuLanClient, safe_print_name
+from .client import BambuLanClient
+from .validate import (
+    is_valid_access_code,
+    is_valid_lan_host,
+    is_valid_mqtt_port,
+    is_valid_serial,
+    safe_print_name,
+)
 
 
 class BambuPlugin(
@@ -33,28 +40,47 @@ class BambuPlugin(
 
     def on_shutdown(self):
         if self._client:
-            self._client.stop()
+            self._client.disconnect()
             self._client = None
 
     def _connect(self):
         host = (self._settings.get(["host"]) or "").strip()
         code = self._settings.get(["access_code"]) or ""
         serial = (self._settings.get(["serial"]) or "").strip()
+        port = self._settings.get(["mqtt_port"]) or 8883
         if not (host and code and serial):
             self._logger.info("Bambu LAN settings incomplete")
             return
+        if not is_valid_lan_host(host):
+            self._logger.error("Refusing MQTT connect: invalid host")
+            return
+        if not is_valid_serial(serial):
+            self._logger.error("Refusing MQTT connect: invalid serial")
+            return
+        if not is_valid_access_code(code):
+            self._logger.error("Refusing MQTT connect: invalid access code format")
+            return
+        if not is_valid_mqtt_port(port):
+            self._logger.error("Refusing MQTT connect: mqtt port must be 8883")
+            return
         if self._client:
-            self._client.stop()
-        self._client = BambuLanClient(
-            host=host,
-            access_code=code,
-            serial=serial,
-            on_report=self._on_report,
-            logger=self._logger,
-            tls_mode=self._settings.get(["tls_mode"]) or "pin",
-            tls_fingerprint=self._settings.get(["tls_fingerprint"]) or "",
-            on_fingerprint=self._store_fingerprint,
-        )
+            self._client.disconnect()
+        try:
+            self._client = BambuLanClient(
+                host=host,
+                access_code=code,
+                serial=serial,
+                on_report=self._on_report,
+                logger=self._logger,
+                tls_mode=self._settings.get(["tls_mode"]) or "pin",
+                tls_fingerprint=self._settings.get(["tls_fingerprint"]) or "",
+                on_fingerprint=self._store_fingerprint,
+                port=port,
+            )
+        except ValueError:
+            self._logger.error("Refusing MQTT connect: settings rejected")
+            self._client = None
+            return
         self._client.start()
 
     def _store_fingerprint(self, fingerprint):
@@ -89,7 +115,7 @@ class BambuPlugin(
         elif command == "resume":
             self._client.resume()
         elif command == "stop":
-            self._client.stop()
+            self._client.stop_print()
         elif command == "print":
             name = safe_print_name((data or {}).get("file"))
             if not name:

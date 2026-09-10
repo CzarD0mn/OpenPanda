@@ -1,51 +1,41 @@
-import hashlib
 import json
-import re
-import ssl
 import threading
 
 import paho.mqtt.client as mqtt
 
-REPORT_TOPIC = "device/{serial}/report"
-REQUEST_TOPIC = "device/{serial}/request"
-
-PRINT_NAME = re.compile(
-    r"^[A-Za-z0-9][A-Za-z0-9._\- ]{0,118}\.(3mf|gcode)$",
-    re.IGNORECASE,
+from .tls import (
+    TLS_INSECURE,
+    TLS_MODES,
+    TLS_PIN,
+    TLS_SYSTEM,
+    TlsPinMismatch,
+    capture_peer_fingerprint,
+    make_insecure_context,
+    make_pinning_context,
+    make_system_context,
+    normalize_fingerprint,
+)
+from .validate import (
+    MQTT_PORT,
+    is_valid_access_code,
+    is_valid_lan_host,
+    is_valid_serial,
+    safe_print_name,
 )
 
-TLS_PIN = "pin"
-TLS_SYSTEM = "system"
-TLS_INSECURE = "insecure_lan"
-
-
-def safe_print_name(name):
-    if not isinstance(name, str):
-        return None
-    if "/" in name or "\\" in name or ".." in name:
-        return None
-    if len(name) > 128:
-        return None
-    if not PRINT_NAME.match(name):
-        return None
-    return name
-
-
-def cert_fingerprint(der_bytes):
-    return hashlib.sha256(der_bytes).hexdigest()
-
-
-class TlsPinMismatch(Exception):
-    pass
+REPORT_TOPIC = "device/{serial}/report"
+REQUEST_TOPIC = "device/{serial}/request"
 
 
 class BambuLanClient:
     """LAN MQTTS client for Bambu Lab printers.
 
     Auth: username = bblp, password = LAN access code.
-    Default TLS mode is certificate pinning (TOFU). Bambu printers use a
-    self-signed cert, so public-CA verification fails; pinning still stops
-    a later MITM from swapping the cert. ``insecure_lan`` is opt-in only.
+
+    Default TLS mode is certificate pinning. The pin is enforced inside
+    SSL wrap/handshake — before MQTT CONNECT, so the access code is not
+    sent to a peer whose cert does not match. An empty stored pin is
+    filled with a TLS-only TOFU probe that also sends no MQTT credentials.
     """
 
     def __init__(
@@ -58,84 +48,84 @@ class BambuLanClient:
         tls_mode=TLS_PIN,
         tls_fingerprint="",
         on_fingerprint=None,
+        port=MQTT_PORT,
     ):
-        self.host = host
-        self.serial = serial
+        if not is_valid_lan_host(host):
+            raise ValueError("invalid host")
+        if not is_valid_serial(serial):
+            raise ValueError("invalid serial")
+        if not is_valid_access_code(access_code):
+            raise ValueError("invalid access code")
+        if int(port) != MQTT_PORT:
+            raise ValueError("invalid mqtt port")
+        self.host = host.strip()
+        self.serial = serial.strip().upper()
+        self._access_code = access_code
+        self.port = MQTT_PORT
         self.on_report = on_report
         self._logger = logger
-        self.tls_mode = tls_mode if tls_mode in {TLS_PIN, TLS_SYSTEM, TLS_INSECURE} else TLS_PIN
-        self.tls_fingerprint = (tls_fingerprint or "").strip().lower()
+        self.tls_mode = tls_mode if tls_mode in TLS_MODES else TLS_PIN
+        self.tls_fingerprint = normalize_fingerprint(tls_fingerprint)
         self.on_fingerprint = on_fingerprint
         self._client = mqtt.Client(
             mqtt.CallbackAPIVersion.VERSION2,
-            client_id="octobambu-%s" % serial[-6:],
+            client_id="octobambu-%s" % self.serial[-6:],
             userdata=None,
         )
-        self._client.username_pw_set("bblp", access_code)
-        self._client.tls_set_context(self._ssl_context())
         self._client.on_connect = self._on_connect
         self._client.on_message = self._on_message
+        self._auth_attached = False
 
     def _ssl_context(self):
-        ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-        ctx.minimum_version = ssl.TLSVersion.TLSv1_2
         if self.tls_mode == TLS_SYSTEM:
-            ctx.check_hostname = True
-            ctx.verify_mode = ssl.CERT_REQUIRED
-            return ctx
-        ctx.check_hostname = False
-        ctx.verify_mode = ssl.CERT_NONE
+            return make_system_context()
         if self.tls_mode == TLS_INSECURE:
             self._logger.warning(
                 "tls_mode=insecure_lan: MQTT certificate is not verified"
             )
-        return ctx
+            return make_insecure_context()
+        return make_pinning_context(self.tls_fingerprint)
+
+    def _attach_auth(self):
+        if self._auth_attached:
+            return
+        self._client.username_pw_set("bblp", self._access_code)
+        self._auth_attached = True
 
     def start(self):
         threading.Thread(target=self._loop, daemon=True, name="octobambu-mqtt").start()
 
-    def stop(self):
+    def disconnect(self):
         try:
             self._client.disconnect()
         except Exception:
             pass
 
     def _loop(self):
-        self._client.connect(self.host, 8883, keepalive=30)
-        self._client.loop_forever()
-
-    def _peer_fingerprint(self):
-        sock = self._client.socket()
-        if sock is None or not hasattr(sock, "getpeercert"):
-            return None
-        der = sock.getpeercert(binary_form=True)
-        if not der:
-            return None
-        return cert_fingerprint(der)
-
-    def _enforce_pin(self):
-        if self.tls_mode != TLS_PIN:
-            return
-        fp = self._peer_fingerprint()
-        if not fp:
-            raise TlsPinMismatch("MQTT peer certificate missing")
-        if not self.tls_fingerprint:
-            self.tls_fingerprint = fp
-            if self.on_fingerprint:
-                self.on_fingerprint(fp)
-            self._logger.info("TOFU pinned printer cert sha256:%s", fp[:16])
-            return
-        if fp != self.tls_fingerprint:
+        try:
+            if self.tls_mode == TLS_PIN and not self.tls_fingerprint:
+                fp = capture_peer_fingerprint(self.host, self.port)
+                self.tls_fingerprint = fp
+                if self.on_fingerprint:
+                    self.on_fingerprint(fp)
+                self._logger.info(
+                    "TOFU captured printer cert sha256:%s (no MQTT auth sent)",
+                    fp[:16],
+                )
+            self._attach_auth()
+            self._client.tls_set_context(self._ssl_context())
+            self._client.connect(self.host, self.port, keepalive=30)
+            self._client.loop_forever()
+        except TlsPinMismatch:
             self._logger.error("TLS pin mismatch — refusing MQTT session")
-            raise TlsPinMismatch("tls_fingerprint does not match peer cert")
+        except Exception:
+            self._logger.exception("MQTT loop ended")
 
     def _on_connect(self, client, _userdata, _flags, reason_code, _properties=None):
-        try:
-            self._enforce_pin()
-        except TlsPinMismatch:
-            client.disconnect()
-            return
-        if reason_code != 0 and getattr(reason_code, "value", reason_code) not in (0, "Success"):
+        if reason_code != 0 and getattr(reason_code, "value", reason_code) not in (
+            0,
+            "Success",
+        ):
             self._logger.warning("MQTT connect rc=%s", reason_code)
             return
         topic = REPORT_TOPIC.format(serial=self.serial)
@@ -162,7 +152,7 @@ class BambuLanClient:
     def resume(self):
         self.push({"print": {"sequence_id": "0", "command": "resume"}})
 
-    def stop(self):
+    def stop_print(self):
         self.push({"print": {"sequence_id": "0", "command": "stop"}})
 
     def start_print(self, filename):
