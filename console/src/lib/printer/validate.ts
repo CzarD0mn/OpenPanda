@@ -9,6 +9,7 @@ export function isSafePrintFileName(name: string): boolean {
   if (name.includes("/") || name.includes("\\") || name.includes("..")) {
     return false;
   }
+  if ([...name].some((c) => c.charCodeAt(0) < 32)) return false;
   return SAFE_PRINT_FILE.test(name);
 }
 
