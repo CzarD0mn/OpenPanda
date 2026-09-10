@@ -2,8 +2,8 @@ from setuptools import setup
 
 setup(
     name="octoprint-bambu",
-    version="0.5.0",
-    description="OctoPrint plugin for Bambu Lab printers over LAN MQTT with TLS pinning",
+    version="0.6.0",
+    description="OctoPrint plugin for Bambu Lab printers over LAN MQTT with TLS pinning before MQTT auth",
     author="OctoBambu",
     license="AGPLv3",
     packages=["octoprint_bambu"],
