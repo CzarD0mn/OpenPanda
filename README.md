@@ -1,6 +1,12 @@
 # OpenPanda
 
-OctoPrint plugin for Bambu Lab printers over LAN MQTT, plus a simulated control console.
+Independent OctoPrint plugin that talks to Bambu Lab printers over LAN MQTT, plus a simulated control console.
+
+## Names
+
+**OpenPanda** is this project’s name. It is not affiliated with, endorsed by, or a product of Bambu Lab or OctoPrint / Gina Häußge.
+
+References to Bambu Lab, OctoPrint, printer models, and LAN MQTT fields describe the machines and protocols the plugin speaks. Those names and marks belong to their owners. This repo does not claim them.
 
 ## Security (0.6.0)
 
