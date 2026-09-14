@@ -69,7 +69,7 @@ class BambuLanClient:
         self.on_fingerprint = on_fingerprint
         self._client = mqtt.Client(
             mqtt.CallbackAPIVersion.VERSION2,
-            client_id="octobambu-%s" % self.serial[-6:],
+            client_id="openpanda-%s" % self.serial[-6:],
             userdata=None,
         )
         self._client.on_connect = self._on_connect
@@ -93,7 +93,7 @@ class BambuLanClient:
         self._auth_attached = True
 
     def start(self):
-        threading.Thread(target=self._loop, daemon=True, name="octobambu-mqtt").start()
+        threading.Thread(target=self._loop, daemon=True, name="openpanda-mqtt").start()
 
     def disconnect(self):
         try:

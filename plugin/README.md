@@ -1,4 +1,4 @@
-# OctoBambu
+# OpenPanda
 
 OctoPrint plugin for Bambu Lab printers over LAN MQTT.
 

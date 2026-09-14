@@ -2,11 +2,11 @@ import importlib.util
 import unittest
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1] / "octoprint_bambu" / "validate.py"
+ROOT = Path(__file__).resolve().parents[1] / "octoprint_openpanda" / "validate.py"
 
 
 def load():
-    spec = importlib.util.spec_from_file_location("octoprint_bambu_validate", ROOT)
+    spec = importlib.util.spec_from_file_location("octoprint_openpanda_validate", ROOT)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod

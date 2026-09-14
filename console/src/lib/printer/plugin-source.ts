@@ -1,6 +1,6 @@
 export const PLUGIN_FILES: { path: string; body: string }[] = [
   {
-    path: "octoprint_bambu/tls.py",
+    path: "octoprint_openpanda/tls.py",
     body: `def capture_peer_fingerprint(host, port, timeout=10):
     """TLS-only probe. No MQTT CONNECT and no access code are sent."""
     ...
@@ -12,7 +12,7 @@ def make_pinning_context(expected_fingerprint):
 `,
   },
   {
-    path: "octoprint_bambu/client.py",
+    path: "octoprint_openpanda/client.py",
     body: `class BambuLanClient:
     """MQTTS client. Pin is enforced BEFORE MQTT CONNECT."""
 
@@ -33,8 +33,8 @@ def make_pinning_context(expected_fingerprint):
 `,
   },
   {
-    path: "octoprint_bambu/__init__.py",
-    body: `class BambuPlugin(...):
+    path: "octoprint_openpanda/__init__.py",
+    body: `class OpenPandaPlugin(...):
     def get_settings_defaults(self):
         return {
             "host": "", "access_code": "", "serial": "",

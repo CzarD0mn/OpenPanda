@@ -9,11 +9,11 @@ import time
 import unittest
 from pathlib import Path
 
-TLS_PATH = Path(__file__).resolve().parents[1] / "octoprint_bambu" / "tls.py"
+TLS_PATH = Path(__file__).resolve().parents[1] / "octoprint_openpanda" / "tls.py"
 
 
 def load_tls():
-    spec = importlib.util.spec_from_file_location("octoprint_bambu_tls", TLS_PATH)
+    spec = importlib.util.spec_from_file_location("octoprint_openpanda_tls", TLS_PATH)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
@@ -275,22 +275,22 @@ class ClientAuthTimingTests(unittest.TestCase):
         sys.modules["paho.mqtt"] = paho_mqtt
         sys.modules["paho.mqtt.client"] = paho_client
 
-        pkg = types.ModuleType("octoprint_bambu")
+        pkg = types.ModuleType("octoprint_openpanda")
         pkg.__path__ = [str(TLS_PATH.parent)]
-        sys.modules["octoprint_bambu"] = pkg
-        sys.modules["octoprint_bambu.tls"] = tls
+        sys.modules["octoprint_openpanda"] = pkg
+        sys.modules["octoprint_openpanda.tls"] = tls
 
         validate_path = TLS_PATH.parent / "validate.py"
         spec_v = importlib.util.spec_from_file_location(
-            "octoprint_bambu.validate", validate_path
+            "octoprint_openpanda.validate", validate_path
         )
         validate = importlib.util.module_from_spec(spec_v)
         spec_v.loader.exec_module(validate)
-        sys.modules["octoprint_bambu.validate"] = validate
+        sys.modules["octoprint_openpanda.validate"] = validate
 
         client_path = TLS_PATH.parent / "client.py"
         spec_c = importlib.util.spec_from_file_location(
-            "octoprint_bambu.client", client_path
+            "octoprint_openpanda.client", client_path
         )
         client_mod = importlib.util.module_from_spec(spec_c)
         spec_c.loader.exec_module(client_mod)

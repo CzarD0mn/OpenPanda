@@ -10,7 +10,7 @@ from .validate import (
 )
 
 
-class BambuPlugin(
+class OpenPandaPlugin(
     octoprint.plugin.SettingsPlugin,
     octoprint.plugin.AssetPlugin,
     octoprint.plugin.TemplatePlugin,
@@ -128,21 +128,21 @@ class BambuPlugin(
         return [dict(type="settings", custom_bindings=False)]
 
     def get_assets(self):
-        return dict(js=["js/bambu.js"], css=["css/bambu.css"])
+        return dict(js=["js/openpanda.js"], css=["css/openpanda.css"])
 
     def get_update_information(self):
         return dict(
-            bambu=dict(
-                displayName="OctoBambu",
+            openpanda=dict(
+                displayName="OpenPanda",
                 displayVersion=self._plugin_version,
                 type="github_release",
                 user="CzarD0mn",
-                repo="OctoBambu",
+                repo="OpenPanda",
                 current=self._plugin_version,
             )
         )
 
 
-__plugin_name__ = "OctoBambu"
+__plugin_name__ = "OpenPanda"
 __plugin_pythoncompat__ = ">=3.9,<4"
-__plugin_implementation__ = BambuPlugin()
+__plugin_implementation__ = OpenPandaPlugin()

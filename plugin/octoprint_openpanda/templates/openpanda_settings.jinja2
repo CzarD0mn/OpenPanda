@@ -1,28 +1,28 @@
 <form class="form-horizontal">
-  <h3>OctoBambu</h3>
+  <h3>OpenPanda</h3>
   <p>LAN MQTTS to a Bambu Lab printer. Default TLS mode pins the printer certificate (TOFU).</p>
   <div class="control-group">
     <label class="control-label">Host</label>
     <div class="controls">
-      <input type="text" class="input-block-level" data-bind="value: settings.plugins.bambu.host">
+      <input type="text" class="input-block-level" data-bind="value: settings.plugins.openpanda.host">
     </div>
   </div>
   <div class="control-group">
     <label class="control-label">LAN access code</label>
     <div class="controls">
-      <input type="password" class="input-block-level" autocomplete="off" data-bind="value: settings.plugins.bambu.access_code">
+      <input type="password" class="input-block-level" autocomplete="off" data-bind="value: settings.plugins.openpanda.access_code">
     </div>
   </div>
   <div class="control-group">
     <label class="control-label">Serial</label>
     <div class="controls">
-      <input type="text" class="input-block-level" data-bind="value: settings.plugins.bambu.serial">
+      <input type="text" class="input-block-level" data-bind="value: settings.plugins.openpanda.serial">
     </div>
   </div>
   <div class="control-group">
     <label class="control-label">TLS mode</label>
     <div class="controls">
-      <select data-bind="value: settings.plugins.bambu.tls_mode">
+      <select data-bind="value: settings.plugins.openpanda.tls_mode">
         <option value="pin">pin (recommended)</option>
         <option value="system">system CA</option>
         <option value="insecure_lan">insecure_lan (MITM possible)</option>
@@ -32,7 +32,7 @@
   <div class="control-group">
     <label class="control-label">Pinned SHA-256</label>
     <div class="controls">
-      <input type="text" class="input-block-level" data-bind="value: settings.plugins.bambu.tls_fingerprint" placeholder="filled on first connect">
+      <input type="text" class="input-block-level" data-bind="value: settings.plugins.openpanda.tls_fingerprint" placeholder="filled on first connect">
     </div>
   </div>
 </form>

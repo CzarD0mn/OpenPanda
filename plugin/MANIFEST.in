@@ -1,2 +1,2 @@
-recursive-include octoprint_bambu/templates *
-recursive-include octoprint_bambu/static *
+recursive-include octoprint_openpanda/templates *
+recursive-include octoprint_openpanda/static *
