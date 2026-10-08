@@ -184,5 +184,12 @@ class PluginReportTests(unittest.TestCase):
         self.assertEqual(self.sent, [])
 
 
+class ApiProtectionTests(unittest.TestCase):
+    def test_api_is_admin_only_and_protected(self):
+        plugin = load_package().OpenPandaPlugin()
+        self.assertIs(plugin.is_api_adminonly(), True)
+        self.assertIs(plugin.is_api_protected(), True)
+
+
 if __name__ == "__main__":
     unittest.main()

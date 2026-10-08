@@ -122,6 +122,9 @@ class OpenPandaPlugin(
     def is_api_adminonly(self):
         return True
 
+    def is_api_protected(self):
+        return True
+
     def on_api_command(self, command, data):
         if not self._client:
             return
