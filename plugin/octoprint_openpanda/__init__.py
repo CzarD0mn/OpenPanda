@@ -1,6 +1,7 @@
 import octoprint.plugin
 
 from .client import BambuLanClient
+from .tls import fingerprint_configured, normalize_fingerprint
 from .validate import (
     is_valid_access_code,
     is_valid_lan_host,
@@ -63,6 +64,19 @@ class OpenPandaPlugin(
         if not is_valid_mqtt_port(port):
             self._logger.error("Refusing MQTT connect: mqtt port must be 8883")
             return
+        tls_mode = self._settings.get(["tls_mode"]) or "pin"
+        tls_fingerprint = self._settings.get(["tls_fingerprint"]) or ""
+        if (
+            tls_mode == "pin"
+            and fingerprint_configured(tls_fingerprint)
+            and not normalize_fingerprint(tls_fingerprint)
+        ):
+            self._logger.error(
+                "Refusing MQTT connect: tls_fingerprint is not a 64-character "
+                "SHA-256 hex digest. Paste only the hex digest (colons allowed), "
+                "or clear it to re-run TOFU."
+            )
+            return
         if self._client:
             self._client.disconnect()
         try:
@@ -72,8 +86,8 @@ class OpenPandaPlugin(
                 serial=serial,
                 on_report=self._on_report,
                 logger=self._logger,
-                tls_mode=self._settings.get(["tls_mode"]) or "pin",
-                tls_fingerprint=self._settings.get(["tls_fingerprint"]) or "",
+                tls_mode=tls_mode,
+                tls_fingerprint=tls_fingerprint,
                 on_fingerprint=self._store_fingerprint,
                 port=port,
             )

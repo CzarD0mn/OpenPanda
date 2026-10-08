@@ -4,6 +4,7 @@
 | --- | --- |
 | MQTT TLS | Pin (SHA-256), enforced in the TLS wrap **before** MQTT CONNECT |
 | First-time pin | TLS-only TOFU probe — no access code on the wire |
+| Malformed pin | Refuse to connect — never treated as empty, never falls back to TOFU |
 | Print names | Basename `.3mf` / `.gcode` only |
 | Host / serial / port | Validated before connect; MQTT port must be 8883 |
 | Plugin API | Admin session / API key |

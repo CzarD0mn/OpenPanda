@@ -10,6 +10,7 @@ from .tls import (
     TLS_SYSTEM,
     TlsPinMismatch,
     capture_peer_fingerprint,
+    fingerprint_configured,
     make_insecure_context,
     make_pinning_context,
     make_system_context,
@@ -66,6 +67,15 @@ class BambuLanClient:
         self._logger = logger
         self.tls_mode = tls_mode if tls_mode in TLS_MODES else TLS_PIN
         self.tls_fingerprint = normalize_fingerprint(tls_fingerprint)
+        if (
+            self.tls_mode == TLS_PIN
+            and fingerprint_configured(tls_fingerprint)
+            and not self.tls_fingerprint
+        ):
+            # A pin was configured but is not a usable SHA-256 hex digest.
+            # Fail closed instead of treating it as "no pin", which would
+            # silently fall back to TOFU and overwrite the configured value.
+            raise ValueError("invalid tls fingerprint")
         self.on_fingerprint = on_fingerprint
         self._client = mqtt.Client(
             mqtt.CallbackAPIVersion.VERSION2,

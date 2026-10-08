@@ -30,6 +30,13 @@ def normalize_fingerprint(value):
     return hex_only
 
 
+def fingerprint_configured(value):
+    """True if the user supplied any pin value at all (valid or not)."""
+    if isinstance(value, str):
+        return bool(value.strip())
+    return value is not None and value != ""
+
+
 def fingerprints_match(seen, expected):
     a = normalize_fingerprint(seen)
     b = normalize_fingerprint(expected)
