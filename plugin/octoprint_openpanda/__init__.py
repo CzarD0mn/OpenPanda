@@ -8,6 +8,7 @@ from .validate import (
     is_valid_lan_host,
     is_valid_mqtt_port,
     is_valid_serial,
+    parse_bool,
     safe_gcode_state,
     safe_print_name,
 )
@@ -140,7 +141,10 @@ class OpenPandaPlugin(
                 return dict(error="invalid_file")
             self._client.start_print(name)
         elif command == "light":
-            self._client.set_chamber_light(bool((data or {}).get("on")))
+            on = parse_bool((data or {}).get("on"))
+            if on is None:
+                return dict(error="invalid_on")
+            self._client.set_chamber_light(on)
 
     def get_template_configs(self):
         return [dict(type="settings", custom_bindings=False)]

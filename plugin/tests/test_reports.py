@@ -191,5 +191,28 @@ class ApiProtectionTests(unittest.TestCase):
         self.assertIs(plugin.is_api_protected(), True)
 
 
+class LightCommandTests(unittest.TestCase):
+    def setUp(self):
+        pkg = load_package()
+        self.plugin = pkg.OpenPandaPlugin()
+        self.calls = []
+        self.plugin._client = types.SimpleNamespace(
+            set_chamber_light=self.calls.append
+        )
+
+    def test_string_values_parsed(self):
+        for value, expected in (("false", False), ("0", False), ("off", False),
+                                ("true", True), ("on", True), (True, True), (0, False)):
+            self.calls.clear()
+            self.assertIsNone(self.plugin.on_api_command("light", {"on": value}))
+            self.assertEqual(self.calls, [expected], msg=repr(value))
+
+    def test_unknown_values_rejected(self):
+        for value in ("maybe", None, 2, [], {}):
+            result = self.plugin.on_api_command("light", {"on": value})
+            self.assertEqual(result, {"error": "invalid_on"}, msg=repr(value))
+        self.assertEqual(self.calls, [])
+
+
 if __name__ == "__main__":
     unittest.main()

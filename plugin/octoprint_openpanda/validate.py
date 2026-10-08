@@ -96,3 +96,22 @@ def safe_gcode_state(value, default="UNKNOWN"):
     if not value or len(value) > 64 or not value.isprintable():
         return default
     return value
+
+
+_TRUE = {"true", "1", "on", "yes"}
+_FALSE = {"false", "0", "off", "no"}
+
+
+def parse_bool(value):
+    """Strict boolean parsing for API input. Returns True, False, or None."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int):
+        return {1: True, 0: False}.get(value)
+    if isinstance(value, str):
+        text = value.strip().lower()
+        if text in _TRUE:
+            return True
+        if text in _FALSE:
+            return False
+    return None

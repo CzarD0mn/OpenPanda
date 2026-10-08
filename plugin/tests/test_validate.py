@@ -84,6 +84,14 @@ class ValidateTests(unittest.TestCase):
         for bad in (None, 5, [], {"a": 1}, "", "x" * 65, "bad\nstate"):
             self.assertEqual(V.safe_gcode_state(bad), "UNKNOWN", msg=repr(bad)[:40])
 
+    def test_parse_bool(self):
+        for value in (True, 1, "true", "TRUE", " on ", "1", "yes"):
+            self.assertIs(V.parse_bool(value), True, msg=repr(value))
+        for value in (False, 0, "false", "False", "off", "0", "no"):
+            self.assertIs(V.parse_bool(value), False, msg=repr(value))
+        for value in (None, 2, -1, 1.0, "", "maybe", "truthy", [], {}, [True]):
+            self.assertIsNone(V.parse_bool(value), msg=repr(value))
+
 
 if __name__ == "__main__":
     unittest.main()
