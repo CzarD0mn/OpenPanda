@@ -3,10 +3,12 @@ import octoprint.plugin
 from .client import BambuLanClient
 from .tls import fingerprint_configured, normalize_fingerprint
 from .validate import (
+    clamp_progress,
     is_valid_access_code,
     is_valid_lan_host,
     is_valid_mqtt_port,
     is_valid_serial,
+    safe_gcode_state,
     safe_print_name,
 )
 
@@ -102,18 +104,17 @@ class OpenPandaPlugin(
         self._settings.save()
 
     def _on_report(self, payload):
-        print_ = payload.get("print") if isinstance(payload, dict) else None
-        if not isinstance(print_, dict):
-            return
-        gcode_state = print_.get("gcode_state", "IDLE")
         try:
-            percent = float(print_.get("mc_percent", 0) or 0)
-        except (TypeError, ValueError):
-            percent = 0.0
-        self._plugin_manager.send_plugin_message(
-            self._identifier,
-            {"state": gcode_state, "progress": percent},
-        )
+            print_ = payload.get("print") if isinstance(payload, dict) else None
+            if not isinstance(print_, dict):
+                return
+            message = {"state": safe_gcode_state(print_.get("gcode_state", "IDLE"))}
+            percent = clamp_progress(print_.get("mc_percent", 0) or 0)
+            if percent is not None:
+                message["progress"] = percent
+            self._plugin_manager.send_plugin_message(self._identifier, message)
+        except Exception:
+            self._logger.exception("Error handling printer report")
 
     def get_api_commands(self):
         return dict(pause=[], resume=[], stop=[], print=["file"], light=["on"])

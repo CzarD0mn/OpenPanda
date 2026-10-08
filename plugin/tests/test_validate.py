@@ -70,6 +70,20 @@ class ValidateTests(unittest.TestCase):
         self.assertFalse(V.is_valid_mqtt_port(443))
         self.assertFalse(V.is_valid_mqtt_port("not-a-port"))
 
+    def test_clamp_progress(self):
+        self.assertEqual(V.clamp_progress(42), 42.0)
+        self.assertEqual(V.clamp_progress("57.5"), 57.5)
+        self.assertEqual(V.clamp_progress(-5), 0.0)
+        self.assertEqual(V.clamp_progress(250), 100.0)
+        for bad in (float("nan"), float("inf"), float("-inf"), "nan", "1e400",
+                    10 ** 400, None, True, [], {}, "abc"):
+            self.assertIsNone(V.clamp_progress(bad), msg=repr(bad)[:40])
+
+    def test_safe_gcode_state(self):
+        self.assertEqual(V.safe_gcode_state("RUNNING"), "RUNNING")
+        for bad in (None, 5, [], {"a": 1}, "", "x" * 65, "bad\nstate"):
+            self.assertEqual(V.safe_gcode_state(bad), "UNKNOWN", msg=repr(bad)[:40])
+
 
 if __name__ == "__main__":
     unittest.main()

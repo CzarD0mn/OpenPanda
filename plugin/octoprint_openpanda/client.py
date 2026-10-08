@@ -144,13 +144,24 @@ class BambuLanClient:
         self.push({"pushing": {"sequence_id": "0", "command": "pushall"}})
 
     def _on_message(self, _client, _userdata, msg):
+        # Reports are untrusted input. Nothing in here may raise: paho
+        # re-raises callback exceptions out of loop_forever(), which would
+        # end the MQTT session for good.
         try:
             payload = json.loads(msg.payload.decode("utf-8"))
-        except ValueError:
+        except Exception as exc:
+            # ValueError/UnicodeDecodeError for junk, RecursionError for
+            # deeply nested JSON, MemoryError, etc.
+            self._logger.warning(
+                "Ignoring malformed MQTT report (%s)", type(exc).__name__
+            )
             return
         if not isinstance(payload, dict):
             return
-        self.on_report(payload)
+        try:
+            self.on_report(payload)
+        except Exception:
+            self._logger.exception("Error handling MQTT report")
 
     def push(self, body):
         topic = REQUEST_TOPIC.format(serial=self.serial)

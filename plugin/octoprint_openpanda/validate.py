@@ -1,3 +1,4 @@
+import math
 import re
 
 PRINT_NAME = re.compile(
@@ -68,3 +69,30 @@ def is_valid_mqtt_port(port):
         return int(port) == MQTT_PORT
     except (TypeError, ValueError):
         return False
+
+
+def clamp_progress(value):
+    """Return printer progress as a finite float in [0, 100], or None.
+
+    The value comes from untrusted printer JSON, so anything that is not a
+    plain number/numeric string, overflows, or is NaN/inf is dropped.
+    """
+    if isinstance(value, bool) or value is None:
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if not math.isfinite(number):
+        return None
+    return min(100.0, max(0.0, number))
+
+
+def safe_gcode_state(value, default="UNKNOWN"):
+    """Printer state string for the frontend: short printable text only."""
+    if not isinstance(value, str):
+        return default
+    value = value.strip()
+    if not value or len(value) > 64 or not value.isprintable():
+        return default
+    return value
