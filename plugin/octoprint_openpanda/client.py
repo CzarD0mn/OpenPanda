@@ -118,16 +118,25 @@ class BambuLanClient:
                 self.tls_fingerprint = fp
                 if self.on_fingerprint:
                     self.on_fingerprint(fp)
-                self._logger.info(
-                    "TOFU captured printer cert sha256:%s (no MQTT auth sent)",
-                    fp[:16],
+                self._logger.warning(
+                    "TOFU: trusting printer cert sha256:%s on first use (no MQTT "
+                    "auth sent). Verify this fingerprint out-of-band.",
+                    fp,
                 )
             self._attach_auth()
             self._client.tls_set_context(self._ssl_context())
             self._client.connect(self.host, self.port, keepalive=30)
             self._client.loop_forever()
-        except TlsPinMismatch:
-            self._logger.error("TLS pin mismatch — refusing MQTT session")
+        except TlsPinMismatch as exc:
+            self._logger.error(
+                "TLS pin mismatch — refusing MQTT session (%s). "
+                "expected sha256:%s seen sha256:%s. If the printer was replaced "
+                "or reset, verify the new fingerprint out-of-band and paste it "
+                "into tls_fingerprint; do not just clear the pin.",
+                exc,
+                getattr(exc, "expected", "") or "-",
+                getattr(exc, "seen", "") or "-",
+            )
         except Exception:
             self._logger.exception("MQTT loop ended")
 

@@ -12,7 +12,12 @@ FINGERPRINT_HEX = re.compile(r"^[0-9a-f]{64}$")
 
 
 class TlsPinMismatch(Exception):
-    pass
+    """Pin check failed. ``expected``/``seen`` are SHA-256 hex or ""."""
+
+    def __init__(self, message, expected="", seen=""):
+        super().__init__(message)
+        self.expected = expected
+        self.seen = seen
 
 
 def cert_fingerprint(der_bytes):
@@ -52,10 +57,14 @@ def verify_pinned_socket(ssock, expected_fingerprint):
     try:
         der = ssock.getpeercert(binary_form=True)
     except Exception as exc:
-        raise TlsPinMismatch("MQTT peer certificate missing") from exc
+        raise TlsPinMismatch(
+            "MQTT peer certificate missing", expected=expected
+        ) from exc
     seen = cert_fingerprint(der)
     if not fingerprints_match(seen, expected):
-        raise TlsPinMismatch("tls_fingerprint does not match peer cert")
+        raise TlsPinMismatch(
+            "tls_fingerprint does not match peer cert", expected=expected, seen=seen
+        )
     return seen
 
 

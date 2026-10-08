@@ -59,8 +59,14 @@ def _load_client_module():
 
 
 class Log:
-    def __getattr__(self, _name):
-        return lambda *a, **k: None
+    def __init__(self):
+        self.lines = []
+
+    def __getattr__(self, level):
+        def log(msg, *args, **_kwargs):
+            self.lines.append((level, msg % args if args else msg))
+
+        return log
 
 
 class MalformedPinTests(unittest.TestCase):
@@ -76,12 +82,13 @@ class MalformedPinTests(unittest.TestCase):
 
     def _make(self, pin, mode="pin"):
         stored = []
+        self.log = Log()
         inst = self.client.BambuLanClient(
             host="192.168.1.50",
             access_code="12345678",
             serial="00M00A123456789",
             on_report=lambda *_: None,
-            logger=Log(),
+            logger=self.log,
             tls_mode=mode,
             tls_fingerprint=pin,
             on_fingerprint=stored.append,
@@ -122,6 +129,34 @@ class MalformedPinTests(unittest.TestCase):
     def test_malformed_pin_ignored_in_non_pin_modes(self):
         inst, _ = self._make("junk", mode="system")
         self.assertEqual(inst.tls_fingerprint, "")
+
+
+
+class PinLoggingTests(unittest.TestCase):
+    """Admins need the full fingerprints to verify a cert out-of-band."""
+
+    setUp = MalformedPinTests.setUp
+    _make = MalformedPinTests._make
+
+    def test_tofu_logs_full_fingerprint(self):
+        inst, _ = self._make("")
+        inst._loop()
+        self.assertTrue(any("b" * 64 in line for _l, line in self.log.lines))
+
+    def test_mismatch_logs_expected_and_seen(self):
+        tls = self.mods["tls"]
+        inst, _ = self._make("a" * 64)
+
+        def connect(*_a, **_k):
+            raise tls.TlsPinMismatch("mismatch", expected="a" * 64, seen="c" * 64)
+
+        inst._client.connect = connect
+        inst._loop()
+        errors = [line for level, line in self.log.lines if level == "error"]
+        self.assertEqual(len(errors), 1)
+        self.assertIn("a" * 64, errors[0])
+        self.assertIn("c" * 64, errors[0])
+        self.assertNotIn("12345678", errors[0])
 
 
 if __name__ == "__main__":
