@@ -12,7 +12,12 @@ FINGERPRINT_HEX = re.compile(r"^[0-9a-f]{64}$")
 
 
 class TlsPinMismatch(Exception):
-    pass
+    """Pin check failed. ``expected``/``seen`` are SHA-256 hex or ""."""
+
+    def __init__(self, message, expected="", seen=""):
+        super().__init__(message)
+        self.expected = expected
+        self.seen = seen
 
 
 def cert_fingerprint(der_bytes):
@@ -30,6 +35,13 @@ def normalize_fingerprint(value):
     return hex_only
 
 
+def fingerprint_configured(value):
+    """True if the user supplied any pin value at all (valid or not)."""
+    if isinstance(value, str):
+        return bool(value.strip())
+    return value is not None and value != ""
+
+
 def fingerprints_match(seen, expected):
     a = normalize_fingerprint(seen)
     b = normalize_fingerprint(expected)
@@ -45,10 +57,14 @@ def verify_pinned_socket(ssock, expected_fingerprint):
     try:
         der = ssock.getpeercert(binary_form=True)
     except Exception as exc:
-        raise TlsPinMismatch("MQTT peer certificate missing") from exc
+        raise TlsPinMismatch(
+            "MQTT peer certificate missing", expected=expected
+        ) from exc
     seen = cert_fingerprint(der)
     if not fingerprints_match(seen, expected):
-        raise TlsPinMismatch("tls_fingerprint does not match peer cert")
+        raise TlsPinMismatch(
+            "tls_fingerprint does not match peer cert", expected=expected, seen=seen
+        )
     return seen
 
 
@@ -59,6 +75,7 @@ class PinnedSSLSocket:
         object.__setattr__(self, "_ssock", ssock)
         object.__setattr__(self, "_expected", expected_fingerprint)
         object.__setattr__(self, "_pinned", False)
+        object.__setattr__(self, "_failed", False)
         try:
             der = ssock.getpeercert(binary_form=True)
         except Exception:
@@ -67,7 +84,17 @@ class PinnedSSLSocket:
             self._verify()
 
     def _verify(self):
-        verify_pinned_socket(self._ssock, self._expected)
+        try:
+            verify_pinned_socket(self._ssock, self._expected)
+        except TlsPinMismatch:
+            # Same as make_pinning_context.wrap_socket: never leave a TLS
+            # session open to a peer whose cert failed the pin.
+            object.__setattr__(self, "_failed", True)
+            try:
+                self._ssock.close()
+            except Exception:
+                pass
+            raise
         object.__setattr__(self, "_pinned", True)
 
     def do_handshake(self, *args, **kwargs):
@@ -78,6 +105,8 @@ class PinnedSSLSocket:
     def _ensure_pinned(self):
         if self._pinned:
             return
+        if self._failed:
+            raise TlsPinMismatch("TLS pin failed — socket closed")
         try:
             der = self._ssock.getpeercert(binary_form=True)
         except Exception:
@@ -120,7 +149,7 @@ class PinnedSSLSocket:
         return getattr(self._ssock, name)
 
     def __setattr__(self, name, value):
-        if name in {"_ssock", "_expected", "_pinned"}:
+        if name in {"_ssock", "_expected", "_pinned", "_failed"}:
             object.__setattr__(self, name, value)
         else:
             setattr(self._ssock, name, value)

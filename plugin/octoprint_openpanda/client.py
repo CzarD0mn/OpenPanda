@@ -10,6 +10,7 @@ from .tls import (
     TLS_SYSTEM,
     TlsPinMismatch,
     capture_peer_fingerprint,
+    fingerprint_configured,
     make_insecure_context,
     make_pinning_context,
     make_system_context,
@@ -66,6 +67,15 @@ class BambuLanClient:
         self._logger = logger
         self.tls_mode = tls_mode if tls_mode in TLS_MODES else TLS_PIN
         self.tls_fingerprint = normalize_fingerprint(tls_fingerprint)
+        if (
+            self.tls_mode == TLS_PIN
+            and fingerprint_configured(tls_fingerprint)
+            and not self.tls_fingerprint
+        ):
+            # A pin was configured but is not a usable SHA-256 hex digest.
+            # Fail closed instead of treating it as "no pin", which would
+            # silently fall back to TOFU and overwrite the configured value.
+            raise ValueError("invalid tls fingerprint")
         self.on_fingerprint = on_fingerprint
         self._client = mqtt.Client(
             mqtt.CallbackAPIVersion.VERSION2,
@@ -108,16 +118,25 @@ class BambuLanClient:
                 self.tls_fingerprint = fp
                 if self.on_fingerprint:
                     self.on_fingerprint(fp)
-                self._logger.info(
-                    "TOFU captured printer cert sha256:%s (no MQTT auth sent)",
-                    fp[:16],
+                self._logger.warning(
+                    "TOFU: trusting printer cert sha256:%s on first use (no MQTT "
+                    "auth sent). Verify this fingerprint out-of-band.",
+                    fp,
                 )
             self._attach_auth()
             self._client.tls_set_context(self._ssl_context())
             self._client.connect(self.host, self.port, keepalive=30)
             self._client.loop_forever()
-        except TlsPinMismatch:
-            self._logger.error("TLS pin mismatch — refusing MQTT session")
+        except TlsPinMismatch as exc:
+            self._logger.error(
+                "TLS pin mismatch — refusing MQTT session (%s). "
+                "expected sha256:%s seen sha256:%s. If the printer was replaced "
+                "or reset, verify the new fingerprint out-of-band and paste it "
+                "into tls_fingerprint; do not just clear the pin.",
+                exc,
+                getattr(exc, "expected", "") or "-",
+                getattr(exc, "seen", "") or "-",
+            )
         except Exception:
             self._logger.exception("MQTT loop ended")
 
@@ -134,13 +153,24 @@ class BambuLanClient:
         self.push({"pushing": {"sequence_id": "0", "command": "pushall"}})
 
     def _on_message(self, _client, _userdata, msg):
+        # Reports are untrusted input. Nothing in here may raise: paho
+        # re-raises callback exceptions out of loop_forever(), which would
+        # end the MQTT session for good.
         try:
             payload = json.loads(msg.payload.decode("utf-8"))
-        except ValueError:
+        except Exception as exc:
+            # ValueError/UnicodeDecodeError for junk, RecursionError for
+            # deeply nested JSON, MemoryError, etc.
+            self._logger.warning(
+                "Ignoring malformed MQTT report (%s)", type(exc).__name__
+            )
             return
         if not isinstance(payload, dict):
             return
-        self.on_report(payload)
+        try:
+            self.on_report(payload)
+        except Exception:
+            self._logger.exception("Error handling MQTT report")
 
     def push(self, body):
         topic = REQUEST_TOPIC.format(serial=self.serial)

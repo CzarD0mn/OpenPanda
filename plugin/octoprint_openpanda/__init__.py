@@ -1,11 +1,15 @@
 import octoprint.plugin
 
 from .client import BambuLanClient
+from .tls import fingerprint_configured, normalize_fingerprint
 from .validate import (
+    clamp_progress,
     is_valid_access_code,
     is_valid_lan_host,
     is_valid_mqtt_port,
     is_valid_serial,
+    parse_bool,
+    safe_gcode_state,
     safe_print_name,
 )
 
@@ -63,6 +67,19 @@ class OpenPandaPlugin(
         if not is_valid_mqtt_port(port):
             self._logger.error("Refusing MQTT connect: mqtt port must be 8883")
             return
+        tls_mode = self._settings.get(["tls_mode"]) or "pin"
+        tls_fingerprint = self._settings.get(["tls_fingerprint"]) or ""
+        if (
+            tls_mode == "pin"
+            and fingerprint_configured(tls_fingerprint)
+            and not normalize_fingerprint(tls_fingerprint)
+        ):
+            self._logger.error(
+                "Refusing MQTT connect: tls_fingerprint is not a 64-character "
+                "SHA-256 hex digest. Paste only the hex digest (colons allowed), "
+                "or clear it to re-run TOFU."
+            )
+            return
         if self._client:
             self._client.disconnect()
         try:
@@ -72,8 +89,8 @@ class OpenPandaPlugin(
                 serial=serial,
                 on_report=self._on_report,
                 logger=self._logger,
-                tls_mode=self._settings.get(["tls_mode"]) or "pin",
-                tls_fingerprint=self._settings.get(["tls_fingerprint"]) or "",
+                tls_mode=tls_mode,
+                tls_fingerprint=tls_fingerprint,
                 on_fingerprint=self._store_fingerprint,
                 port=port,
             )
@@ -88,23 +105,25 @@ class OpenPandaPlugin(
         self._settings.save()
 
     def _on_report(self, payload):
-        print_ = payload.get("print") if isinstance(payload, dict) else None
-        if not isinstance(print_, dict):
-            return
-        gcode_state = print_.get("gcode_state", "IDLE")
         try:
-            percent = float(print_.get("mc_percent", 0) or 0)
-        except (TypeError, ValueError):
-            percent = 0.0
-        self._plugin_manager.send_plugin_message(
-            self._identifier,
-            {"state": gcode_state, "progress": percent},
-        )
+            print_ = payload.get("print") if isinstance(payload, dict) else None
+            if not isinstance(print_, dict):
+                return
+            message = {"state": safe_gcode_state(print_.get("gcode_state", "IDLE"))}
+            percent = clamp_progress(print_.get("mc_percent", 0) or 0)
+            if percent is not None:
+                message["progress"] = percent
+            self._plugin_manager.send_plugin_message(self._identifier, message)
+        except Exception:
+            self._logger.exception("Error handling printer report")
 
     def get_api_commands(self):
         return dict(pause=[], resume=[], stop=[], print=["file"], light=["on"])
 
     def is_api_adminonly(self):
+        return True
+
+    def is_api_protected(self):
         return True
 
     def on_api_command(self, command, data):
@@ -122,7 +141,10 @@ class OpenPandaPlugin(
                 return dict(error="invalid_file")
             self._client.start_print(name)
         elif command == "light":
-            self._client.set_chamber_light(bool((data or {}).get("on")))
+            on = parse_bool((data or {}).get("on"))
+            if on is None:
+                return dict(error="invalid_on")
+            self._client.set_chamber_light(on)
 
     def get_template_configs(self):
         return [dict(type="settings", custom_bindings=False)]

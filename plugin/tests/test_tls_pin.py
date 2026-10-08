@@ -230,6 +230,58 @@ class TlsPinTests(unittest.TestCase):
         for chunk in server.received:
             self.assertNotIn(b"MQTT-CONNECT-SECRET", chunk)
 
+    def test_explicit_handshake_mismatch_closes_socket(self):
+        # paho wraps with do_handshake_on_connect=False and then calls
+        # do_handshake() itself; a mismatch there must close the TLS socket.
+        server = TlsServer(self.cert_a, self.key_a).start()
+        time.sleep(0.05)
+        ctx = tls.make_pinning_context(self.fp_b)
+        try:
+            with socket.create_connection(("127.0.0.1", server.port), timeout=5) as raw:
+                ssock = ctx.wrap_socket(
+                    raw, server_hostname="127.0.0.1", do_handshake_on_connect=False
+                )
+                with self.assertRaises(tls.TlsPinMismatch):
+                    ssock.do_handshake()
+                self.assertEqual(ssock._ssock.fileno(), -1)
+                with self.assertRaises(tls.TlsPinMismatch):
+                    ssock.sendall(b"MQTT-CONNECT-SECRET")
+        finally:
+            time.sleep(0.2)
+            server.close()
+        for chunk in server.received:
+            self.assertNotIn(b"MQTT-CONNECT-SECRET", chunk)
+
+    def test_mismatch_exception_carries_both_fingerprints(self):
+        server = TlsServer(self.cert_a, self.key_a).start()
+        time.sleep(0.05)
+        ctx = tls.make_pinning_context(self.fp_b.upper())
+        try:
+            with socket.create_connection(("127.0.0.1", server.port), timeout=5) as raw:
+                with self.assertRaises(tls.TlsPinMismatch) as caught:
+                    ctx.wrap_socket(raw, server_hostname="127.0.0.1")
+        finally:
+            time.sleep(0.2)
+            server.close()
+        self.assertEqual(caught.exception.expected, self.fp_b)
+        self.assertEqual(caught.exception.seen, self.fp_a)
+
+    def test_explicit_handshake_match_keeps_socket_open(self):
+        server = TlsServer(self.cert_a, self.key_a).start()
+        time.sleep(0.05)
+        ctx = tls.make_pinning_context(self.fp_a)
+        with socket.create_connection(("127.0.0.1", server.port), timeout=5) as raw:
+            ssock = ctx.wrap_socket(
+                raw, server_hostname="127.0.0.1", do_handshake_on_connect=False
+            )
+            ssock.do_handshake()
+            self.assertNotEqual(ssock.fileno(), -1)
+            ssock.sendall(b"hello")
+            ssock.close()
+        time.sleep(0.2)
+        server.close()
+        self.assertEqual(server.received, [b"hello"])
+
 
 class ClientAuthTimingTests(unittest.TestCase):
     """paho Client is stubbed so we can prove auth is not attached before TOFU."""
